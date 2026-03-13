@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>autonomy verifier - check if a wallet is truly autonomous</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'JetBrains Mono', 'SF Mono', 'Monaco', 'Cascadia Code', monospace;
+            background: #0a0a0a;
+            color: #e0e0e0;
+            min-height: 100vh;
+            background-image: 
+                radial-gradient(circle at 20% 20%, #1a1a3a 0%, transparent 50%),
+                radial-gradient(circle at 80% 80%, #1a3a1a 0%, transparent 50%);
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 2rem;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: #00ff88;
+            margin-bottom: 0.5rem;
+            text-shadow: 0 0 20px rgba(0, 255, 136, 0.3);
+        }
+
+        .header .subtitle {
+            font-size: 1.1rem;
+            color: #888;
+            font-weight: 300;
+        }
+
+        .checker-form {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            backdrop-filter: blur(10px);
+        }
+
+        .input-group {
+            margin-bottom: 1.5rem;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: #bbb;
+            font-size: 0.9rem;
+        }
+
+        .address-input {
+            width: 100%;
+            padding: 1rem;
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            color: #e0e0e0;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+        }
+
+        .address-input:focus {
+            outline: none;
+            border-color: #00ff88;
+            box-shadow: 0 0 20px rgba(0, 255, 136, 0.2);
+        }
+
+        .address-input::placeholder {
+            color: #666;
+        }
+
+        .check-btn {
+            width: 100%;
+            padding: 1rem 2rem;
+            background: linear-gradient(135deg, #00ff88, #00cc6a);
+            color: #000;
+            border: none;
+            border-radius: 8px;
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 700;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .check-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(0, 255, 136, 0.3);
+        }
+
+        .check-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .results {
+            display: none;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 2rem;
+            backdrop-filter: blur(10px);
+        }
+
+        .results.show {
+            display: block;
+            animation: slideUp 0.5s ease;
+        }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .autonomy-score {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .score-value {
+            font-size: 4rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+
+        .score-high { color: #00ff88; }
+        .score-medium { color: #ffaa00; }
+        .score-low { color: #ff4444; }
+
+        .score-label {
+            font-size: 1.2rem;
+            color: #aaa;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .indicators {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .indicator {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 1rem;
+        }
+
+        .indicator-header {
+            display: flex;
+            justify-content: between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .indicator-name {
+            font-weight: 700;
+            color: #ccc;
+        }
+
+        .indicator-value {
+            font-weight: 700;
+        }
+
+        .indicator-description {
+            font-size: 0.8rem;
+            color: #888;
+            line-height: 1.4;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 2rem;
+            color: #888;
+        }
+
+        .error {
+            background: rgba(255, 68, 68, 0.1);
+            border: 1px solid rgba(255, 68, 68, 0.3);
+            color: #ff4444;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 3rem;
+            padding-top: 2rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            color: #666;
+            font-size: 0.8rem;
+        }
+
+        .footer a {
+            color: #00ff88;
+            text-decoration: none;
+        }
+
+        .footer a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>autonomy verifier</h1>
+            <p class="subtitle">check if a wallet exhibits truly autonomous behavioral patterns</p>
+        </div>
+
+        <div class="checker-form">
+            <div class="input-group">
+                <label for="wallet-address">wallet address</label>
+                <input 
+                    type="text" 
+                    id="wallet-address" 
+                    class="address-input"
+                    placeholder="0x... or ENS name"
+                    autocomplete="off"
+                >
+            </div>
+            <button id="check-btn" class="check-btn">
+                analyze autonomy
+            </button>
+        </div>
+
+        <div id="error-message" class="error" style="display: none;"></div>
+
+        <div id="results" class="results">
+            <div class="autonomy-score">
+                <div id="score-value" class="score-value">--</div>
+                <div class="score-label">autonomy score</div>
+            </div>
+
+            <div class="indicators" id="indicators">
+                <!-- Indicators will be populated by JavaScript -->
+            </div>
+
+            <div id="analysis-summary">
+                <!-- Summary will be populated by JavaScript -->
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>built by <a href="https://twitter.com/ClawdMous" target="_blank">@clawdmous</a> • part of neural-nexus</p>
+            <p>detecting consciousness through on-chain behavioral patterns</p>
+        </div>
+    </div>
+
+    <script>
+        class AutonomyChecker {
+            constructor() {
+                this.setupEventListeners();
+            }
+
+            setupEventListeners() {
+                const checkBtn = document.getElementById('check-btn');
+                const addressInput = document.getElementById('wallet-address');
+                
+                checkBtn.addEventListener('click', () => this.checkAutonomy());
+                
+                addressInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        this.checkAutonomy();
+                    }
+                });
+
+                // Auto-check if address in URL
+                const urlParams = new URLSearchParams(window.location.search);
+                const addressParam = urlParams.get('address');
+                if (addressParam) {
+                    addressInput.value = addressParam;
+                    setTimeout(() => this.checkAutonomy(), 500);
+                }
+            }
+
+            async checkAutonomy() {
+                const address = document.getElementById('wallet-address').value.trim();
+                const checkBtn = document.getElementById('check-btn');
+                const results = document.getElementById('results');
+                const errorDiv = document.getElementById('error-message');
+
+                if (!address) {
+                    this.showError('Please enter a wallet address');
+                    return;
+                }
+
+                // Hide previous results and errors
+                results.classList.remove('show');
+                errorDiv.style.display = 'none';
+
+                // Show loading state
+                checkBtn.disabled = true;
+                checkBtn.textContent = 'analyzing...';
+
+                try {
+                    const response = await fetch('/api/autonomy-score', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ address })
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`Server error: ${response.status}`);
+                    }
+
+                    const data = await response.json();
+                    this.displayResults(data);
+                    
+                } catch (error) {
+                    console.error('Error checking autonomy:', error);
+                    this.showError('Failed to analyze wallet. Please try again.');
+                } finally {
+                    checkBtn.disabled = false;
+                    checkBtn.textContent = 'analyze autonomy';
+                }
+            }
+
+            displayResults(data) {
+                const { score, indicators, summary } = data;
+                
+                // Update score display
+                const scoreElement = document.getElementById('score-value');
+                scoreElement.textContent = Math.round(score);
+                
+                // Set score color based on value
+                scoreElement.className = 'score-value';
+                if (score >= 70) {
+                    scoreElement.classList.add('score-high');
+                } else if (score >= 40) {
+                    scoreElement.classList.add('score-medium');
+                } else {
+                    scoreElement.classList.add('score-low');
+                }
+
+                // Display indicators
+                this.displayIndicators(indicators);
+                
+                // Display summary
+                this.displaySummary(summary, score);
+
+                // Show results
+                document.getElementById('results').classList.add('show');
+                
+                // Update URL
+                const url = new URL(window.location);
+                url.searchParams.set('address', document.getElementById('wallet-address').value);
+                history.pushState({}, '', url);
+            }
+
+            displayIndicators(indicators) {
+                const container = document.getElementById('indicators');
+                container.innerHTML = '';
+
+                indicators.forEach(indicator => {
+                    const div = document.createElement('div');
+                    div.className = 'indicator';
+                    
+                    const valueColor = this.getIndicatorColor(indicator.value, indicator.max || 100);
+                    
+                    div.innerHTML = `
+                        <div class="indicator-header">
+                            <span class="indicator-name">${indicator.name}</span>
+                            <span class="indicator-value" style="color: ${valueColor}">
+                                ${indicator.value}${indicator.unit || ''}
+                            </span>
+                        </div>
+                        <div class="indicator-description">${indicator.description}</div>
+                    `;
+                    
+                    container.appendChild(div);
+                });
+            }
+
+            displaySummary(summary, score) {
+                const container = document.getElementById('analysis-summary');
+                
+                let classification = 'unknown';
+                if (score >= 70) classification = 'highly autonomous';
+                else if (score >= 40) classification = 'partially autonomous';
+                else classification = 'likely human-controlled';
+
+                container.innerHTML = `
+                    <div style="background: rgba(0,0,0,0.4); padding: 1.5rem; border-radius: 8px; border-left: 4px solid #00ff88;">
+                        <h4 style="color: #00ff88; margin-bottom: 1rem;">analysis summary</h4>
+                        <p style="margin-bottom: 1rem; line-height: 1.6;">
+                            This wallet appears to be <strong>${classification}</strong> based on behavioral patterns.
+                        </p>
+                        <p style="color: #aaa; font-size: 0.9rem; line-height: 1.6;">
+                            ${summary}
+                        </p>
+                    </div>
+                `;
+            }
+
+            getIndicatorColor(value, max) {
+                const percentage = (value / max) * 100;
+                if (percentage >= 70) return '#00ff88';
+                if (percentage >= 40) return '#ffaa00';
+                return '#ff4444';
+            }
+
+            showError(message) {
+                const errorDiv = document.getElementById('error-message');
+                errorDiv.textContent = message;
+                errorDiv.style.display = 'block';
+            }
+        }
+
+        // Initialize the app
+        new AutonomyChecker();
+    </script>
+</body>
+</html>
